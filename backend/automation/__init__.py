@@ -1,0 +1,1 @@
+# RAMA automation module

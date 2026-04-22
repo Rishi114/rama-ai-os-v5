@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # ── Core Orchestrator (FastAPI + SwarmRouter) ─────────────────────────────
+  orchestrator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.orchestrator
+    container_name: rama-orchestrator
+    ports:
+      - "3500:3500"
+    environment:
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - NETWORK_SENTINEL_ENABLED=${NETWORK_SENTINEL_ENABLED:-true}
+      - OLLAMA_GPU_ACCELERATION=${OLLAMA_GPU_ACCELERATION:-cuda}
+      - OLLAMA_NUM_GPUS=${OLLAMA_NUM_GPUS:-1}
+      - OLLAMA_MEMORY_STRATEGY=${OLLAMA_MEMORY_STRATEGY:-DYNAMIC}
+    volumes:
+      - ./backend:/app
+      - rama-memory:/app/data
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── Frontend (React + Vite HUD) ───────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: rama-frontend
+    ports:
+      - "8080:8080"
+    environment:
+      - VITE_ORCHESTRATOR_URL=http://localhost:3500
+      - VITE_GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
+  # ── Neo4j Knowledge Graph ─────────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5-community
+    container_name: rama-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-rama_secret}
+    volumes:
+      - rama-neo4j:/data
+    restart: unless-stopped
+
+  # ── Redis (fast cache + pub/sub) ──────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: rama-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - rama-redis:/data
+    restart: unless-stopped
+
+volumes:
+  rama-memory:
+  rama-neo4j:
+  rama-redis:
